@@ -1,39 +1,26 @@
-import { TechnicalTextSplitter } from './services/textsplitter.js';
-import { generateEmbedding } from './services/embedding.js';
+import Fastify from 'fastify';
+import dotenv from 'dotenv';
+import { apiRoutes } from './api/routes.js';
 
-async function testAIServices() {
-  console.log('⏳ Running Text Processing and Embedding Model diagnostics...');
+// Auto-boots the BullMQ queue worker connection background long-poll
+import './workers/ingestionWorker.js'; 
 
-  // Mocking a long company document string
-  const corporateRunbookSample = `
-  SECURITY INSTRUCTION: All developers must rotate their private SSH keys every 90 days. 
-  Production server access is strictly restricted to secure bastions operating on Port 2244. 
-  Failure to follow these protocols will trigger an automated lock from the central SecOps firewall. 
-  The primary contact for infrastructure keys is the Devops Lead, Sarah.
-  `;
+dotenv.config();
 
-  // 1. Execute text slicing logic
-  const splitter = new TechnicalTextSplitter({ chunkSize: 150, chunkOverlap: 20 });
-  const textChunks = splitter.splitText(corporateRunbookSample);
-  
-  console.log(`\n✂️ Document segmented successfully into [${textChunks.length}] chunks.`);
-  textChunks.forEach((chunk, index) => {
-    console.log(`   [Chunk ${index + 1}]: "${chunk}"`);
-  });
+const fastify = Fastify({ logger: false }); // Turn off noisy logging for cleaner console views
 
-  // 2. Pass the very first chunk down to local Ollama hardware to test embedding math
+// Register our routing middleware
+fastify.register(apiRoutes, { prefix: '/api' });
+
+const startServer = async () => {
   try {
-    console.log('\n🤖 Sending Chunk 1 down to local Ollama (nomic-embed-text)...');
-    const vector = await generateEmbedding(textChunks[0]);
-    
-    console.log('✅ Embedding successful vector response intercepted!');
-    console.log(`📐 Vector Dimensions: ${vector.length} floats (Expected: 768)`);
-    console.log(`📊 Sample Vector Data Matrix: [${vector.slice(0, 5).join(', ')}, ...]`);
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ Diagnostic test failed:', err);
+    const port = process.env.PORT || 3000;
+    await fastify.listen({ port, host: '0.0.0.0' });
+    console.log(`\n🚀 Fastify Enterprise RAG Engine running on http://localhost:${port}`);
+  } catch (error) {
+    fastify.log.error(error);
     process.exit(1);
   }
-}
+};
 
-testAIServices();
+startServer();
