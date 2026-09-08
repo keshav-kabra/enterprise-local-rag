@@ -1,10 +1,10 @@
 import dotenv from 'dotenv';
-import { ingestionQueue } from './config/queue.js';
-import { pool } from './config/db.js';
+import { ingestionQueue } from '../src/config/queue.js';
+import { pool } from '../src/config/db.js';
 
 // Senior Architectural Note: Simply importing this file activates the BullMQ 
 // background listener, forcing it to consume from the Redis container.
-import './workers/ingestionWorker.js'; 
+import '../src/workers/ingestionWorker.js';
 
 dotenv.config();
 

@@ -5,7 +5,7 @@ import { TechnicalTextSplitter } from '../services/textsplitter.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { pool } from '../config/db.js';
 
-const splitter = new TechnicalTextSplitter({ chunkSize: 500, chunkOverlap: 50 });
+const splitter = new TechnicalTextSplitter({ chunkSize: 250, chunkOverlap: 25 });
 
 /**
  * Optimized worker processor utilizing batch unnesting queries to prevent N+1 overhead
