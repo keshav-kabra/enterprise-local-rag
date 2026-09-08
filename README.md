@@ -23,7 +23,7 @@ graph TD
     classDef client fill:#0f172a,stroke:#334155,stroke-width:1px,color:#cbd5e1;
 
     %% Ingestion Flow
-    subgraph Ingestion Pipeline (Asynchronous)
+    subgraph "Ingestion Pipeline (Asynchronous)"
         A[User Uploads Content] -->|HTTP POST| B(Fastify Traffic Gateway)
         B -->|Dispatches Payload| C[(Redis Queue Buffer)]:::infra
         C -->|Pulls Job Sequentially| D[BullMQ Processing Worker]:::engine
@@ -33,7 +33,7 @@ graph TD
     end
 
     %% Query Flow
-    subgraph Semantic Retrieval & Streaming (Real-Time)
+    subgraph "Semantic Retrieval & Streaming (Real-Time)"
         H[User Types Prompt] -->|HTTP GET /chat| I(Fastify Stream Engine)
         I -->|Vectorizes Query| J[Ollama Embedding Model]:::engine
         J -->|Executes Cosine Search| K[(pgvector HNSW Graph Index)]:::infra
@@ -43,6 +43,7 @@ graph TD
         I -->|Streams Characters text/event-stream| N[Dark-Themed Chat Dashboard]:::client
     end
 ```
+
 
 ---
 
