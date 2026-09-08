@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # 1. Database with pgvector pre-installed
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: enterprise_rag_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: rag_admin
+      POSTGRES_PASSWORD: secure_rag_password
+      POSTGRES_DB: enterprise_knowledge_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_admin -d enterprise_knowledge_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Cache for BullMQ Task Queue management
+  redis:
+    image: redis:7-alpine
+    container_name: enterprise_rag_queue
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
