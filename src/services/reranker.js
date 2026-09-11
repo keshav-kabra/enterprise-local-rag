@@ -1,62 +1,62 @@
-import { pipeline, env } from '@huggingface/transformers';
+import { AutoTokenizer, AutoModelForSequenceClassification, env } from '@huggingface/transformers';
 
-// Explicitly route local caching models right to our visible workspace folder
 env.cacheDir = './.cache'; 
 
-let rerankPipelineInstance = null;
+let tokenizerInstance = null;
+let modelInstance = null;
 
-async function getRerankerPipeline() {
-  if (!rerankPipelineInstance) {
-    console.log('⏳ [Reranker Model] Mounting High-Precision Cross-Encoder (Xenova/ms-marco-MiniLM-L-6-v2)...');
+/**
+ * Initializes and caches the raw tokenizer and model heads independently,
+ * completely bypassing the buggy pipeline wrappers.
+ */
+async function loadRerankerEngine() {
+  if (!tokenizerInstance || !modelInstance) {
+    console.log('⏳ [Reranker Infrastructure] Initializing raw Cross-Encoder heads (Xenova/ms-marco-MiniLM-L-6-v2)...');
     
-    rerankPipelineInstance = await pipeline('text-classification', 'Xenova/ms-marco-MiniLM-L-6-v2', {
-      progress_callback: (info) => {
-        if (info.status === 'downloading') {
-          const loaded = info.loaded || 0;
-          const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
-          
-          if (info.total) {
-            const percent = ((loaded / info.total) * 100).toFixed(1);
-            const totalMB = (info.total / (1024 * 1024)).toFixed(1);
-            process.stdout.write(`   📥 Streaming weights: ${percent}% (${loadedMB}MB / ${totalMB}MB)\r`);
-          } else {
-            process.stdout.write(`   📥 Streaming weights: ${loadedMB}MB written...\r`);
-          }
-        } else if (info.status === 'done') {
-          console.log(`   ✅ File locked to local cache: ${info.file}                                `);
-        }
-      }
-    });
-    console.log('\n✅ [Reranker Model] Cross-Encoder model loaded successfully.');
+    tokenizerInstance = await AutoTokenizer.from_pretrained('Xenova/ms-marco-MiniLM-L-6-v2');
+    modelInstance = await AutoModelForSequenceClassification.from_pretrained('Xenova/ms-marco-MiniLM-L-6-v2');
+    
+    console.log('✅ [Reranker Infrastructure] Raw model heads successfully mounted to Node thread.');
   }
-  return rerankPipelineInstance;
+  return { tokenizer: tokenizerInstance, model: modelInstance };
 }
 
+/**
+ * Evaluates candidates using direct forward-pass matrix inference over the model's classification head
+ */
 export async function computeLocalCrossEncoderRerank(query, candidates) {
   if (!candidates || candidates.length === 0) return [];
   
-  const classifier = await getRerankerPipeline();
+  const { tokenizer, model } = await loadRerankerEngine();
   const scoredCandidates = [];
   
-  console.log(`🧠 [Reranker Model] Running cross-attention matrices over ${candidates.length} chunks...`);
+  console.log(`🧠 [Reranker Head] Computing forward-pass logits over ${candidates.length} chunks...`);
 
   for (const item of candidates) {
     try {
-      // Cross-Encoder array format: [Query, Document Context Chunk Text]
-      const response = await classifier([query, item.content]);
+      // 🚀 THE PRODUCTION-OPTIMIZED FIX: Max length boundary with zero overhead padding
+      const inputs = await tokenizer(query, {
+        text_pair: item.content,
+        truncation: true,
+        max_length: 512
+      });
 
-      // Transformers v2 text-classification outputs an array: [{ label: 'LABEL_0', score: 0.942 }]
-      const alignmentScore = response[0]?.score || 0;
+      // Execute a raw forward pass through the sequence classification neural network graph
+      const outputs = await model(inputs);
+
+      // Extract the absolute scalar float value matching the classification head directly
+      const rawLogitScore = outputs.logits.data[0];
 
       scoredCandidates.push({
         ...item,
-        rerankScore: parseFloat(alignmentScore)
+        rerankScore: parseFloat(rawLogitScore)
       });
     } catch (err) {
-      console.error(`⚠️ Individual chunk rerank trace dropped:`, err.message);
-      scoredCandidates.push({ ...item, rerankScore: 0 });
+      console.error(`⚠️ Individual chunk forward-pass failed:`, err.message);
+      scoredCandidates.push({ ...item, rerankScore: -99 });
     }
   }
 
+  // Sort candidates descending based on their raw, unique classification head scores
   return scoredCandidates.sort((a, b) => b.rerankScore - a.rerankScore);
 }
