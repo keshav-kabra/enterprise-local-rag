@@ -1,3 +1,6 @@
 node_modules/
 .env
 .DS_Store
+
+# Local Hugging Face AI Model Cache
+.cache
