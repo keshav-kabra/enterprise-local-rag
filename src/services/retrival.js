@@ -1,47 +1,43 @@
 import { generateEmbedding } from './embedding.js';
 import { pool } from '../config/db.js';
+import { computeLocalCrossEncoderRerank } from './reranker.js'; // Import our new model service
 
 /**
- * Executes a high-performance vector similarity search against PostgreSQL
- * @param {string} userQuery - The raw string question asked by the user
- * @param {number} limit - The maximum number of relevant context chunks to return
- * @returns {Promise<Array<{ content: string, similarity: number }>>}
+ * Two-Stage Enterprise Retrieval Pipeline (Vector High-Recall + Cross-Encoder High-Precision)
  */
-export async function performSemanticSearch(userQuery, limit = 3) {
-  console.log(`🔎 [Retrieval] Computing embedding vector for query: "${userQuery}"`);
-  
-  try {
-    // 1. Convert the user's question into the exact same 768-dimension vector space
-    const queryVector = await generateEmbedding(userQuery);
-    
-    // 2. Format the float array into a pgvector-compliant string format: '[0.1, -0.2, ...]'
-    const vectorStringFormat = `[${queryVector.join(',')}]`;
+export async function performAdvancedSearchWithRerank(userQuery, candidateRecallLimit = 10) {
+  console.log(`🔎 [Stage 1] Broad lookup fetching top ${candidateRecallLimit} candidates via pgvector HNSW map...`);
 
-    // 3. Query pgvector using the Cosine Distance operator (<=>)
-    // Senior Note: Cosine distance is (1 - Cosine Similarity). 
-    // Therefore, smaller distance means higher similarity. We sort ascending (ASC).
-    const searchQuery = `
-      SELECT 
-        content,
-        chunk_index,
-        1 - (embedding <=> $1::vector) AS similarity_score
-      FROM document_chunks
-      ORDER BY embedding <=> $1::vector ASC
+  try {
+    // 1. Generate query vector dimensions
+    const queryVector = await generateEmbedding(userQuery);
+    const vectorString = `[${queryVector.join(',')}]`;
+
+    // High Recall Phase: Pull 10 rows from PostgreSQL based on fast distance math
+    const recallQuery = `
+      SELECT c.id, d.filename, c.content, c.chunk_index
+      FROM document_chunks c
+      JOIN documents d ON d.id = c.document_id
+      ORDER BY c.embedding <=> $1::vector ASC
       LIMIT $2;
     `;
+    const result = await pool.query(recallQuery, [vectorString, candidateRecallLimit]);
+    const databaseCandidates = result.rows;
 
-    console.log(`🗄️ [Retrieval] Executing similarity calculation over HNSW index layers...`);
-    const result = await pool.query(searchQuery, [vectorStringFormat, limit]);
+    if (databaseCandidates.length === 0) return [];
 
-    console.log(`✅ [Retrieval] Extracted ${result.rowCount} matching context windows from DB.`);
-    return result.rows.map(row => ({
-      content: row.content,
-      chunkIndex: row.chunk_index,
-      similarity: parseFloat(row.similarity_score).toFixed(4)
-    }));
+    // 🚀 STAGE 2: Pass the 10 rows into our local neural network classifier
+    console.log(`🤖 [Stage 2] Activating Cross-Encoder Model for precision alignment...`);
+    const rerankedList = await computeLocalCrossEncoderRerank(userQuery, databaseCandidates);
+
+    // Filter and slice down to the absolute Top 2 best verified segments
+    const precisionSelection = rerankedList.slice(0, 2);
+    
+    console.log(`🎯 [Retrieval Complete] Top cross-encoder alignment score: ${precisionSelection[0]?.rerankScore.toFixed(4)}`);
+    return precisionSelection;
 
   } catch (error) {
-    console.error('❌ Semantic retrieval pipeline failure:', error.message);
+    console.error('❌ Advanced two-stage retrieval pipeline failed:', error.message);
     throw error;
   }
 }
