@@ -39,7 +39,7 @@ const workerProcessor = async (job) => {
     .replace(/`(?:,|`|-){2,}/g, '');
 
     // 2. Fragment Text (Now returns an array of structural objects, not strings)
-    const structuredChunks = splitter.splitText(fileContent);
+    const structuredChunks = splitter.splitText(cleanedContent);
     console.log(`✂️ [Worker] Fragmented into [${structuredChunks.length}] chunks.`);
 
     const resolvedVectors = new Array(structuredChunks.length);
