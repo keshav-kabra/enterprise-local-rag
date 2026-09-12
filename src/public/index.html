@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OmniGlide Secure Knowledge Platform</title>
-  <script src="https://tailwindcss.com"></script>
+  <!-- 🚀 FIXED: Upgraded script compiler to pull the true, modern live Tailwind compiler engine -->
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background-color: #0f172a; color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
     header { background-color: #1e293b; border-bottom: 1px solid #334155; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
@@ -33,62 +34,54 @@
     <div class="flex items-center gap-3">
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span class="text-xs bg-slate-800 text-slate-300 px-3 py-1 rounded-full font-mono border border-slate-700">Node Cluster: Active</span>
+        <!-- 🚀 FIXED: Reconstructed broken layout elements securely -->
+        <span class="text-xs bg-slate-800 text-slate-300 font-mono px-2 py-1 rounded border border-slate-700">Cluster Connected</span>
       </div>
     </div>
   </header>
 
-  <!-- Content Workspace Layout -->
+  <!-- Complete Functional Split-Panel Workspace Layout -->
   <main>
-    
-    <!-- Left Configuration Panel: Ingestion -->
-    <div class="panel-left shadow-2xl">
-      <div>
-        <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Document Ingestion Manager</h2>
-        <p class="text-xs text-slate-500">Upload technical PDFs or plain-text logs directly to map semantic vector indices.</p>
+    <!-- Left Interaction: File Document Upload Control Desk -->
+    <div class="panel-left">
+      <h2 class="text-sm font-semibold tracking-wide text-slate-200 uppercase font-mono">1. Document Pipeline</h2>
+      <div id="dropZone" class="dropzone">
+        <span class="block text-2xl mb-1">📁</span>
+        <p id="dropZonePrompt" class="text-xs text-slate-300">Drag file here or <span class="text-emerald-400 underline">browse storage</span></p>
+        <input type="file" id="fileInput" class="hidden" accept=".pdf,.txt,.md,.json" />
       </div>
       
-      <!-- Native File Dropzone Container -->
-      <div id="dropZone" class="dropzone group">
-        <input type="file" id="fileInput" accept=".pdf,.txt,.md" class="hidden">
-        <div class="flex flex-col items-center gap-2">
-          <span class="text-3xl group-hover:scale-110 transition-transform">📄</span>
-          <p class="text-sm font-medium text-slate-300" id="dropZonePrompt">Drag & drop your PDF or TXT here</p>
-          <p class="text-xs text-slate-500">or click to browse local files</p>
+      <!-- Upload Details Panel Box -->
+      <div id="fileDetailBox" class="hidden bg-slate-900 border border-slate-800 p-3 rounded-lg flex flex-col gap-2">
+        <div class="flex flex-col gap-0.5">
+          <span id="selectedFileName" class="text-xs text-slate-200 font-medium truncate">document.pdf</span>
+          <span id="selectedFileSize" class="text-[10px] text-slate-400 font-mono">0.0 KB</span>
         </div>
+        <button id="uploadBtn" class="w-full text-xs font-medium tracking-wide">Trigger Async Ingestion</button>
       </div>
 
-      <!-- File Metadata Confirmation Display -->
-      <div id="fileDetailBox" class="hidden bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs flex flex-col gap-1.5">
-        <div class="flex justify-between text-slate-400">
-          <span class="font-semibold text-slate-300 truncate max-w-[200px]" id="selectedFileName">file.pdf</span>
-          <span id="selectedFileSize">0 KB</span>
-        </div>
-        <button id="uploadBtn" class="w-full mt-1 py-2 text-xs">Process & Extract Document Chunks</button>
-      </div>
-      
-      <!-- Status Feedback Area -->
-      <div id="ingestStatus" class="text-xs text-center font-mono py-2 rounded min-h-[38px]"></div>
+      <div id="ingestStatus"></div>
     </div>
 
-    <!-- Right Interaction Panel: Conversational Split Stream Interface -->
-    <div class="panel-right shadow-2xl">
-      <div id="chatBox" class="chat-container bg-slate-900/50">
-        <div class="bg-slate-800/80 border border-slate-700/60 rounded-xl p-4 text-slate-400 max-w-2xl text-sm leading-relaxed shadow-sm">
-          💡 <span class="font-semibold text-slate-200">System Pipeline Online.</span> Multi-part binary ingestion buffers are actively registered. Drop any corporate data specification sheets or operations manual PDFs onto the ingestion manager workspace panel to extract text slices, generate 768d vector graphs, and evaluate hallucination-free summaries natively.
+    <!-- Right Interaction: Real-Time Stream Chat Interface Engine -->
+    <div class="panel-right">
+      <div id="chatBox" class="chat-container">
+        <!-- System Greeting Entry Point -->
+        <div class="flex justify-start w-full">
+          <div class="bg-slate-800 border border-slate-700/60 rounded-2xl rounded-tl-none px-4 py-2.5 max-w-[75%] text-sm text-slate-200 shadow-md leading-relaxed">
+            Welcome to the internal engine environment. Upload enterprise artifacts to your local HNSW cache loop to run precision compliance auditing.
+          </div>
         </div>
       </div>
 
-      <!-- User Text Prompt Interaction Box -->
+      <!-- User Interaction Bar Component -->
       <div class="input-bar">
-        <input id="queryInput" type="text" placeholder="Formulate semantic retrieval questions here (e.g., What are the secondary failover latency limits?)...">
-        <button id="sendBtn" class="flex items-center gap-1.5 px-6">Submit Query</button>
+        <input type="text" id="queryInput" placeholder="Query corporate documentation vectors..." autocomplete="off" />
+        <button id="sendBtn">Execute</button>
       </div>
     </div>
-
   </main>
 
-  <!-- Senior Practice: Isolated Front-end Logic Link -->
-  <script src="/main.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>

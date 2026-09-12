@@ -19,25 +19,30 @@ const CHAT_MODEL = 'llama3';
  */
 export async function generateStreamingRAGResponse(userQuestion, tokenCallback) {
   try {
-    // 1. RETRIEVAL PHASE: Query pgvector for the top 2 closest context chunks
-    const contextMatches = await performSemanticSearch(userQuestion, 2);
+    // 🚀 FIXED: Pass 2 as finalPrecisionLimit, and 10 as candidateRecallLimit
+    const contextMatches = await performSemanticSearch(userQuestion, 2, 10);
 
-    // 2. CONTEXT SYNTHESIS: Flatten the database hits into a single structured string block
+    // 2. CONTEXT SYNTHESIS: Inject structural hierarchy directly into the prompt context layout
     const supportingFactsContext = contextMatches
-      .map((match, idx) => `[Database Document Chunk ${idx + 1}]: "${match.content}"`)
-      .join('\n\n');
+      .map((match, idx) => {
+        const fileTag = `Source File: ${match.filename || 'Unknown'}`;
+        const sectionTag = `Section Context: ${match.section || match.heading || 'General Content'}`;
+        return `[Reference Asset #${idx + 1}]\n📁 ${fileTag}\n📍 ${sectionTag}\n📝 Content: "${match.content}"`;
+      })
+      .join('\n\n---\n\n');
 
     // 3. PROMPT ENGINEERING GUARDRAILS (The Senior Touch)
-    // We lock down the model's instructions so it cannot invent answers.
     const systemPrompt = `
     You are a secure internal enterprise engineering assistant.
     Answer the user's question using ONLY the verified context text blocks provided below.
-    
+
     CRITICAL INSTRUCTIONS:
-    - Rely strictly on the explicit facts provided in the context blocks.
-    - If the context blocks do not contain enough facts to deduce the answer, reply exactly with: "INSUFFICIENT_INTERNAL_CONTEXT".
+    - Present your answer using clean, beautifully formatted Markdown bullet points or numbered lists. Do not jam everything into one paragraph.
+    - Weave your source citations naturally into your response (e.g., "Based on the Introduction section of iso27001.pdf..."). Do not print raw internal label strings.
+    - Rely strictly on the explicit facts provided in the context blocks. 
+    - 🛡️ REVISED GUARDRAIL: If the provided context blocks do not contain the answer or are entirely irrelevant to the question, reply exactly with: "INSUFFICIENT_INTERNAL_CONTEXT". Do not append this note if you are able to successfully fulfill the answer from the text.
     - Do not assume, guess, or reference outside world knowledge.
-    - Keep your response professional, precise, and highly concise.
+    - Keep your response professional, precise, and structured.
 
     VERIFIED CONTEXT FROM INTERNAL POSTGRES DATABASE:
     ${supportingFactsContext || "No context blocks were retrieved from the database."}
@@ -52,14 +57,14 @@ export async function generateStreamingRAGResponse(userQuestion, tokenCallback) 
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userQuestion }
       ],
-      stream: true, // Instructs local hardware to stream characters on-the-fly
+      stream: true,
     });
 
     // 5. STREAM PIPING: Yield tokens through the loop handler the moment they compile
     for await (const chunk of responseStream) {
       const token = chunk.message.content;
       if (token) {
-        tokenCallback(token); // Send text piece straight up to our callback handler
+        tokenCallback(token);
       }
     }
 

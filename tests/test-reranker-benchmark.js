@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-import { performAdvancedSearchWithRerank } from '../src/services/retrival.js'; // Keep consistent with your project's filename spelling
-import { pool } from '../src/config/db.js'; // Import the db configuration pool directly
+import { performSemanticSearch } from '../src/services/retrival.js'; // Updated named function import
+import { pool } from '../src/config/db.js'; 
 
 dotenv.config();
 
@@ -13,7 +13,8 @@ async function runRerankerTest() {
 
   try {
     const startTime = Date.now();
-    const finalTwoChunks = await performAdvancedSearchWithRerank(targetQuestion, 6); 
+    // Querying for top matching chunks
+    const finalTwoChunks = await performSemanticSearch(targetQuestion, 6); 
     const duration = Date.now() - startTime;
 
     console.log(`\n⏱️ Pipeline completed in ${duration}ms (including database fetch + cross-encoder math).`);
@@ -23,24 +24,25 @@ async function runRerankerTest() {
       console.log('⚠️ No chunks returned. Make sure your database tables are populated!');
     }
 
-    finalTwoChunks.forEach((chunk, index) => {
+        finalTwoChunks.forEach((chunk, index) => {
       console.log(`\n🔹 [Top Selection #${index + 1}] (Model Match Score: ${chunk.rerankScore ? chunk.rerankScore.toFixed(4) : '0.0000'})`);
-      console.log(`   File: ${chunk.filename} (Chunk Index: ${chunk.chunkIndex})`);
-      console.log(`   Text Snippet: "${chunk.content.trim().substring(0, 150)}..."`);
+      console.log(`   File: ${chunk.filename} (Chunk Index: ${chunk.chunk_index})`);
+      console.log(`   Parent Section Context: "${chunk.section || 'N/A'}"`);
+      console.log(`   --- FULL RETRIEVED TEXT BLOCK ---`);
+      console.log(chunk.content.trim()); // 🚀 REMOVED THE 150 CHARACTER SUBSTRING LIMIT
+      console.log(`   ---------------------------------`);
     });
+
 
   } catch (err) {
     console.error('❌ Benchmark script crashed:', err);
   } finally {
     console.log('======================================================================\n');
     
-    // 🚀 THE GRACEFUL FIX: Close database pools safely and let Node's garbage collector 
-    // wind down the ONNX C++ runtime background worker threads naturally, preventing abort errors.
     console.log('🧹 Safely draining active database connection channels...');
     await pool.end(); 
     
     console.log('👋 System diagnostic complete.');
-    // REMOVED: process.exit(0) to allow clean asynchronous runtime termination
   }
 }
 
