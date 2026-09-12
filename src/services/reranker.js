@@ -22,41 +22,47 @@ async function loadRerankerEngine() {
 }
 
 /**
- * Evaluates candidates using direct forward-pass matrix inference over the model's classification head
+ * Evaluates candidates using high-speed parallel batch matrix inference over the model's classification head
  */
 export async function computeLocalCrossEncoderRerank(query, candidates) {
   if (!candidates || candidates.length === 0) return [];
   
   const { tokenizer, model } = await loadRerankerEngine();
-  const scoredCandidates = [];
   
-  console.log(`🧠 [Reranker Head] Computing forward-pass logits over ${candidates.length} chunks...`);
+  console.log(`🧠 [Reranker Head] Computing parallel batch forward-pass over ${candidates.length} chunks...`);
 
-  for (const item of candidates) {
-    try {
-      // 🚀 THE PRODUCTION-OPTIMIZED FIX: Max length boundary with zero overhead padding
-      const inputs = await tokenizer(query, {
-        text_pair: item.content,
-        truncation: true,
-        max_length: 512
-      });
+  try {
+    // 🚀 BATCH OPTIMIZATION: Map queries and contents into parallel arrays
+    const queriesArray = new Array(candidates.length).fill(query);
+    const contentsArray = candidates.map(item => item.content);
 
-      // Execute a raw forward pass through the sequence classification neural network graph
-      const outputs = await model(inputs);
+    // Tokenize everything at once using a unified matrix layout
+    const batchInputs = await tokenizer(queriesArray, {
+      text_pair: contentsArray,
+      padding: true,      // Required for batch inputs to align dimensions
+      truncation: true,
+      max_length: 512
+    });
 
-      // Extract the absolute scalar float value matching the classification head directly
-      const rawLogitScore = outputs.logits.data[0];
+    // Run a single parallelized forward pass through the classification model
+    const outputs = await model(batchInputs);
 
-      scoredCandidates.push({
-        ...item,
-        rerankScore: parseFloat(rawLogitScore)
-      });
-    } catch (err) {
-      console.error(`⚠️ Individual chunk forward-pass failed:`, err.message);
-      scoredCandidates.push({ ...item, rerankScore: -99 });
-    }
+    // Extract the raw logit scores from the output tensor data matrix
+    // ms-marco-MiniLM-L-6-v2 outputs a single score logit per row pair layout
+    const scores = outputs.logits.data;
+
+    const scoredCandidates = candidates.map((item, idx) => ({
+      ...item,
+      rerankScore: parseFloat(scores[idx])
+    }));
+
+    // Sort candidates descending based on their raw verification scores
+    return scoredCandidates.sort((a, b) => b.rerankScore - a.rerankScore);
+
+  } catch (err) {
+    console.error(`❌ Parallel batch classification pass failed, falling back to safe defaults:`, err.message);
+    
+    // Fail-safe: Return candidates with a flat baseline score if matrix multiplication crashes
+    return candidates.map(item => ({ ...item, rerankScore: -99 }));
   }
-
-  // Sort candidates descending based on their raw, unique classification head scores
-  return scoredCandidates.sort((a, b) => b.rerankScore - a.rerankScore);
 }

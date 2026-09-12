@@ -5,9 +5,9 @@ import { TechnicalTextSplitter } from '../services/textsplitter.js';
 import { generateEmbedding } from '../services/embedding.js';
 import { pool } from '../config/db.js';
 
-const splitter = new TechnicalTextSplitter({ chunkSize: 250, chunkOverlap: 25 });
+const splitter = new TechnicalTextSplitter({ chunkSize: 1200, chunkOverlap: 150 });
 
-// 🚀 SENIOR PRACTISE: Set your precise micro-batch step size
+// 🚀 SENIOR PRACTICE: Set your precise micro-batch step size
 const EMBEDDING_BATCH_SIZE = 4; 
 
 const workerProcessor = async (job) => {
@@ -29,44 +29,64 @@ const workerProcessor = async (job) => {
     const documentResult = await dbClient.query(documentQuery, [filename, mimeType, fileSize]);
     const documentId = documentResult.rows[0].id;
 
-    // 2. Fragment Text
-    const textChunks = splitter.splitText(fileContent);
-    console.log(`✂️ [Worker] Fragmented into [${textChunks.length}] chunks.`);
+    // 🚀 CLEANING PIPELINE: Strip out raw PDF page breaks and header artifacts
+    let cleanedContent = fileContent
+    // Remove the specific repeated ISO/IEC 27001 header lines
+    .replace(/--(?:`|,|-)+.*?ISO\/IEC\s+27001:\d{4}\(E\)/gi, '')
+    // Strip standalone page number lines surrounded by spacing
+    .replace(/\n\s*\d+\s*\n/g, '\n')
+    // Clean up messy artifact trails left behind by the extraction tool
+    .replace(/`(?:,|`|-){2,}/g, '');
 
-    const resolvedVectors = new Array(textChunks.length);
+    // 2. Fragment Text (Now returns an array of structural objects, not strings)
+    const structuredChunks = splitter.splitText(fileContent);
+    console.log(`✂️ [Worker] Fragmented into [${structuredChunks.length}] chunks.`);
+
+    const resolvedVectors = new Array(structuredChunks.length);
 
     // 🚀 3. MICRO-BATCHING WITH CONTROLLED BACKPRESSURE
     console.log(`🧠 [Worker] Commencing embedding loop with Micro-Batch Size: ${EMBEDDING_BATCH_SIZE}`);
     
-    for (let i = 0; i < textChunks.length; i += EMBEDDING_BATCH_SIZE) {
-      // Slice out the current slice batch of chunks
-      const batchChunks = textChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+    for (let i = 0; i < structuredChunks.length; i += EMBEDDING_BATCH_SIZE) {
+      // Slice out the current batch of structural chunk objects
+      const batchChunks = structuredChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
       const batchIndices = Array.from({ length: batchChunks.length }, (_, idx) => i + idx);
       
-      console.log(`   ⚡ Processing Micro-Batch Chunks [${i} to ${Math.min(i + EMBEDDING_BATCH_SIZE - 1, textChunks.length - 1)}]...`);
+      console.log(`   ⚡ Processing Micro-Batch Chunks [${i} to ${Math.min(i + EMBEDDING_BATCH_SIZE - 1, structuredChunks.length - 1)}]...`);
       
-      // Parallel execution restricted ONLY to the small batch size boundaries
-      const batchPromises = batchChunks.map(chunk => generateEmbedding(chunk));
+      // Pass only the plain text content string to the embedding generator
+      const batchPromises = batchChunks.map(chunk => generateEmbedding(chunk.content));
       const batchVectors = await Promise.all(batchPromises);
 
-      // Assign back to the complete master array index map
+      // Assign back to the master array index map
       batchIndices.forEach((globalIdx, localIdx) => {
         resolvedVectors[globalIdx] = batchVectors[localIdx];
       });
     }
 
-    // 4. Map parameters to native array layout structures
-    const indices = textChunks.map((_, idx) => idx);
+    // 4. Map parameters to native array layout structures for bulk insert
+    const indices = structuredChunks.map((_, idx) => idx);
+    const contents = structuredChunks.map(chunk => chunk.content);
+    const headings = structuredChunks.map(chunk => chunk.heading || null);
+    const sections = structuredChunks.map(chunk => chunk.section || null);
     const embeddings = resolvedVectors.map(v => `[${v.join(',')}]`);
 
-    // 5. Bulk Database Insertion (Single transactional query)
+    // 5. Bulk Database Insertion (Enriched with metadata columns)
     const bulkInsertQuery = `
-      INSERT INTO document_chunks (document_id, chunk_index, content, embedding)
-      SELECT $1, * FROM UNNEST($2::int[], $3::text[], $4::vector[])
+      INSERT INTO document_chunks (document_id, chunk_index, content, heading, section, embedding)
+      SELECT $1, * FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::vector[])
     `;
 
     console.log(`💾 [Worker] Batch-inserting records to PostgreSQL...`);
-    await dbClient.query(bulkInsertQuery, [documentId, indices, textChunks, embeddings]);
+    await dbClient.query(bulkInsertQuery, [
+      documentId, 
+      indices, 
+      contents, 
+      headings, 
+      sections, 
+      embeddings
+    ]);
+    
     await dbClient.query('COMMIT');
 
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -81,10 +101,8 @@ const workerProcessor = async (job) => {
   }
 };
 
-// 🚀 6. CONCURRENCY BOUNDARY THROTLLING
+// 🚀 6. CONCURRENCY BOUNDARY THROTTLING
 export const ingestionWorker = new Worker(INGESTION_QUEUE_NAME, workerProcessor, {
   connection: redisConnection,
-  // Concurrency = 1 means BullMQ will wait for the entire current file script processing 
-  // to completely finalize before drawing another task from Redis, eliminating multi-file stacking.
   concurrency: 1 
 });

@@ -115,6 +115,7 @@ async function executeQuery() {
   // Fire native browser EventSource network socket connection channel loop
   const eventSource = new EventSource(`/api/v1/chat?question=${encodeURIComponent(question)}`);
 
+  // 🚀 FIXED: Unified message consumer that handles the JSON wrapper safely
   eventSource.onmessage = (event) => {
     if (event.data === '[DONE]') {
       eventSource.close();
@@ -122,16 +123,20 @@ async function executeQuery() {
     }
 
     try {
+      // 1. Parse the JSON packet from the stream
       const parsed = JSON.parse(event.data);
-      if (parsed.token) {
+      
+      // 2. Safely isolate the string character within the token key
+      if (parsed && parsed.token) {
         if (textBuffer === '') responseContainer.innerHTML = '';
         
         textBuffer += parsed.token;
-        responseContainer.innerText = textBuffer;
+        // 🚀 FIXED: Converts raw text newlines into real HTML line breaks dynamically
+        responseContainer.innerHTML = textBuffer.replace(/\n/g, '<br />');
         chatBox.scrollTop = chatBox.scrollHeight;
       }
     } catch (err) {
-      console.error("Token decoding error:", err);
+      console.error("Token structure evaluation skipped:", err.message);
     }
   };
 
